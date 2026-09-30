@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agentic Talent Scout</title>
+<style>
+:root{--bg:#f6f7fb;--card:#fff;--tx:#1b1f2a;--mut:#667085;--bd:#e3e6ee;--pri:#1E6FE0;--ok:#12a36b;--mid:#d89614;--bad:#d64545}
+@media (prefers-color-scheme:dark){:root{--bg:#12141b;--card:#1b1e28;--tx:#eceef4;--mut:#9aa1b2;--bd:#2c3040}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:900px;margin:0 auto;padding:24px 16px 60px}h1{font-size:28px;margin:0 0 4px}h3{margin:22px 0 8px}
+.mut{color:var(--mut);font-size:14px}.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:16px;margin-bottom:12px}
+textarea,input[type=password],input[type=number]{width:100%;border:1px solid var(--bd);border-radius:10px;padding:10px;background:var(--bg);color:var(--tx);font:inherit}
+textarea{min-height:150px;resize:vertical}
+button{border:1px solid var(--bd);background:var(--card);color:var(--tx);border-radius:10px;padding:8px 14px;font:inherit;cursor:pointer}
+.blue{background:var(--pri);border-color:var(--pri);color:#fff;font-weight:700}.blue:hover{background:#1859B8}.blue:disabled{opacity:.45;cursor:not-allowed}
+.big{width:100%;font-size:19px;padding:15px;border-radius:14px}.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px}
+.chip{display:inline-block;border-radius:14px;padding:2px 10px;margin:2px;font-size:14px;border:1px solid}
+.b{color:#3b82f6}.p{color:#8b5cf6}.g{color:var(--ok)}.r{color:var(--bad)}
+.kp{display:flex;gap:10px;margin:10px 0}.kp div{flex:1;text-align:center;border:1px solid var(--bd);border-radius:12px;padding:10px;background:var(--card)}.kp b{display:block;font-size:26px}
+.top{display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap}.bar{height:8px;border-radius:6px;background:var(--bg);border:1px solid var(--bd);overflow:hidden;margin:8px 0}.bar i{display:block;height:100%}
+.err{color:var(--bad)}pre{white-space:pre-wrap;background:var(--bg);border:1px solid var(--bd);border-radius:10px;padding:10px;font:inherit;font-size:14px}
+#login{max-width:360px;margin:15vh auto 0}
+</style></head><body><main>
+<h1>🧑‍💼 Agentic Talent Scout</h1>
+
+<div id="login"><div class="card"><input id="pw" type="password" placeholder="🔒 Password" autocomplete="current-password">
+<div class="row"><button id="next" class="blue" style="width:100%">Next</button></div><p id="lerr" class="err" style="margin:8px 0 0"></p></div></div>
+
+<div id="app" hidden>
+<p class="mut">Paste a job description, add resumes, click one button. Get a ranked shortlist.</p>
+<h3>Step 1 - Paste the job description</h3>
+<textarea id="jd" placeholder="Paste the full job description here..."></textarea>
+<div class="row"><button id="sjd">Use a sample job description</button></div>
+<h3>Step 2 - Add resumes</h3>
+<div class="card"><input id="files" type="file" multiple accept=".pdf,.docx,.txt">
+<div class="row"><button id="sres">Try with 3 sample resumes</button><span class="mut" id="cnt">0 resumes added</span></div>
+<p class="mut" style="margin:6px 0 0">PDF, Word (.docx) or text. Select many files at once. Scanned images are not readable.</p></div>
+<details class="card"><summary>⚙️ Optional settings</summary><p class="mut">Maximum notice period (days)</p><input id="notice" type="number" value="90" min="0" max="365" style="max-width:140px"></details>
+<h3>Step 3 - Click the button</h3>
+<button id="go" class="blue big">🔍 Find best candidates</button>
+<p id="status" class="mut" style="text-align:center"></p>
+<div id="out"></div>
+<p class="mut">AI-assisted ranking only. A recruiter must review every shortlist before contacting anyone. Scoring ignores gender, age, religion, caste and marital status.</p>
+</div>
+</main>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+<script>
+const $=id=>document.getElementById(id);let PW="",resumes=[];
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const chips=(a,c)=>(a&&a.length?a:[]).map(x=>`<span class="chip ${c}">${esc(x)}</span>`).join("")||"<i class='mut'>none</i>";
+const api=async b=>{const r=await fetch("/api/screen",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({password:PW,...b})});
+ let d={};try{d=await r.json()}catch(e){}if(!r.ok)throw new Error(d.error||"Server error ("+r.status+"). Please try again.");return d};
+const login=async()=>{PW=$("pw").value;$("lerr").textContent="";
+ try{await api({action:"login"});$("login").hidden=true;$("app").hidden=false}catch(e){$("lerr").textContent=e.message}};
+$("next").onclick=login;$("pw").onkeydown=e=>{if(e.key==="Enter")login()};
+
+const SAMPLE_JD="Senior Python Developer - Hyderabad\n5+ years experience. Must have: Python, Django, AWS, Docker, SQL. Nice to have: Kubernetes, CI/CD.\nNotice period up to 60 days. Hybrid, Hyderabad.";
+const SAMPLES=[["Ananya_Rao.txt","Ananya Rao. Hyderabad. ananya@example.com. 6 years. Notice 30 days. Backend Engineer. Python, Django, REST APIs, AWS (EC2, S3), Docker, PostgreSQL. Led migration to containers."],
+["Imran_Khan.txt","Imran Khan. Bengaluru, open to relocate. imran@example.com. 8 years. Notice 30 days. Lead Engineer. Python, Django, AWS, Docker, Kubernetes, SQL, Jenkins CI/CD. Mentored 5 engineers."],
+["Ravi_Kumar.txt","Ravi Kumar. Hyderabad. ravi@example.com. 7 years. Notice 60 days. Java Developer. Spring Boot, microservices, SQL, some Python scripting."]];
+$("sjd").onclick=()=>$("jd").value=SAMPLE_JD;
+$("sres").onclick=()=>{resumes=SAMPLES.map(([name,text])=>({name,text}));cnt()};
+const cnt=()=>$("cnt").textContent=resumes.length+(resumes.length==1?" resume":" resumes")+" added";
+async function readFile(f){const n=f.name.toLowerCase();
+ if(n.endsWith(".pdf")){pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+  const pdf=await pdfjsLib.getDocument({data:await f.arrayBuffer()}).promise;let t="";
+  for(let i=1;i<=pdf.numPages;i++){const p=await pdf.getPage(i);t+=(await p.getTextContent()).items.map(x=>x.str).join(" ")+"\n"}return t}
+ if(n.endsWith(".docx"))return (await mammoth.extractRawText({arrayBuffer:await f.arrayBuffer()})).value;
+ return await f.text()}
+$("files").onchange=async e=>{$("status").textContent="Reading files...";
+ for(const f of e.target.files){try{const text=await readFile(f);
+  if(text.trim())resumes.push({name:f.name,text});else alert(f.name+" has no readable text (scanned image?). Skipped.")}
+  catch(err){alert("Could not read "+f.name+". Please save it as PDF or .docx.")}}
+ e.target.value="";$("status").textContent="";cnt()};
+
+function reason(c,req,maxN){const mn=req.min_experience_years||0,mx=req.max_experience_years,ex=+c.experience_years||0,loc=(c.location||"").toLowerCase(),locs=(req.locations||[]).map(x=>x.toLowerCase());
+ if(ex&&ex<Math.max(0,mn-1))return `Only ${ex} years of experience (needs ${mn}+)`;
+ if(mx&&ex>mx+3)return `${ex} years of experience (role is for up to ${mx})`;
+ if((+c.notice_period_days||0)>maxN)return `Notice period is ${c.notice_period_days} days (limit is ${maxN})`;
+ if(locs.length&&loc.trim()&&!locs.some(l=>loc.includes(l)||loc.includes("remote")))return `Located in ${c.location} (role is in ${req.locations.join(", ")})`;return""}
+const V={shortlist:["🟢 Strong match","var(--ok)"],maybe:["🟡 Possible match","var(--mid)"],reject:["🔴 Not a fit","var(--bad)"]};
+
+$("go").onclick=async()=>{const jd=$("jd").value.trim();
+ if(!jd||!resumes.length){$("status").innerHTML='<span class="err">Please add a job description and at least one resume.</span>';return}
+ $("go").disabled=true;$("out").innerHTML="";const t0=Date.now();
+ const tick=setInterval(()=>$("status").textContent=`🤖 AI is reading ${resumes.length} resume(s)... ${Math.round((Date.now()-t0)/1000)}s`,500);
+ try{const chunks=[];for(let i=0;i<resumes.length;i+=5)chunks.push(resumes.slice(i,i+5));
+  const res=await Promise.all(chunks.map((c,k)=>api({jd,resumes:c,offset:k*5})));
+  const req=res[0].requirements||{};const byId={};res.forEach(r=>(r.candidates||[]).forEach(c=>byId[c.id]=c));
+  const maxN=+$("notice").value||90;const rows=[],excl=[];
+  resumes.forEach((r,i)=>{const c=byId[i]||{name:r.name,score:0,strengths:"AI returned no result",concerns:"Review manually",recommendation:"maybe"};
+   c.name=c.name||r.name;const why=reason(c,req,maxN);why?excl.push([c,why]):rows.push(c)});
+  rows.sort((a,b)=>b.score-a.score);render(req,rows,excl,resumes.length);
+  $("status").textContent=`Done in ${Math.round((Date.now()-t0)/1000)} seconds`;
+ }catch(e){$("status").innerHTML='<span class="err">'+esc(e.message)+'</span>'}
+ clearInterval(tick);$("go").disabled=false};
+
+function render(req,rows,excl,total){const n=v=>rows.filter(c=>c.recommendation==v).length;
+ const mn=req.min_experience_years,mx=req.max_experience_years,exp=mn&&!mx?mn+"+ years":mn&&mx?mn+"-"+mx+" years":"Not specified";
+ let h=`<h3>What the AI understood</h3><div class="card"><b>Role:</b> ${esc(req.title)}<br><b>Experience:</b> ${exp}<br><b>Location:</b> ${esc((req.locations||[]).join(", ")||"Any")}
+ <p style="margin:8px 0 2px"><b>Must-have skills</b></p>${chips(req.must_have_skills,"b")}${(req.nice_to_have_skills||[]).length?`<p style="margin:8px 0 2px"><b>Nice to have</b></p>${chips(req.nice_to_have_skills,"p")}`:""}</div>
+ <h3>Results</h3><p>I looked at <b>${total}</b> candidate(s). <b>${rows.length}</b> met the basic requirements.</p>
+ <div class="kp"><div><b class="g">${n("shortlist")}</b>🟢 Strong matches</div><div><b style="color:var(--mid)">${n("maybe")}</b>🟡 Possible</div><div><b class="r">${n("reject")}</b>🔴 Not a fit</div></div>`;
+ if(excl.length)h+=`<details class="card"><summary>⛔ ${excl.length} not scored - did not meet basic requirements</summary>${excl.map(([c,w])=>`<p style="margin:6px 0"><b>${esc(c.name)}</b> - ${esc(w)}</p>`).join("")}</details>`;
+ rows.forEach((c,i)=>{const [lab,col]=V[c.recommendation]||V.maybe;h+=`<div class="card"><div class="top"><b>#${i+1} ${esc(c.name)}</b><span><b style="color:${col}">${esc(lab)}</b> · <b style="font-size:22px;color:${col}">${esc(c.score)}%</b></span></div>
+  <div class="bar"><i style="width:${Math.max(0,Math.min(100,c.score))}%;background:${col}"></i></div>
+  <div class="mut">${esc([c.current_role,c.location,c.experience_years?c.experience_years+" yrs":"",c.contact].filter(Boolean).join(" · "))}</div>
+  <p><b>👍 Why they fit:</b> ${esc(c.strengths)}<br><b>⚠️ Things to check:</b> ${esc(c.concerns)}</p>
+  <div>${chips(c.matched_skills,"g")}${(c.missing_skills||[]).map(x=>`<span class="chip r">✗ ${esc(x)}</span>`).join("")}</div>
+  ${c.outreach?`<details><summary>✉️ Suggested message (edit before sending)</summary><pre>${esc(c.outreach)}</pre></details>`:""}</div>`});
+ h+=`<div class="row"><button id="dl">⬇️ Download shortlist (opens in Excel)</button></div>`;$("out").innerHTML=h;
+ $("dl").onclick=()=>{const q=v=>'"'+String(v??"").replace(/"/g,'""')+'"';
+  const csv=["Rank,Name,Match,Verdict,Experience,Location,Contact,Skills to check"].concat(rows.map((c,i)=>[i+1,c.name,c.score,(V[c.recommendation]||V.maybe)[0],c.experience_years,c.location,c.contact,(c.missing_skills||[]).join("; ")].map(q).join(","))).join("\n");
+  const a=document.createElement("a");a.href=URL.createObjectURL(new Blob(["\ufeff"+csv],{type:"text/csv"}));a.download="shortlist.csv";a.click()}}
+</script></body></html>
